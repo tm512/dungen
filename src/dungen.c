@@ -47,36 +47,36 @@ void drawMap (void)
 			if (!world [i][j]) continue;
 			SDL_Rect r = { i * CWIDTH + BORDERTHICK / 2, j * CHEIGHT + BORDERTHICK / 2, CWIDTH - BORDERTHICK, CHEIGHT - BORDERTHICK };
 			SDL_Rect jn;
-			if (world [i][j] & UP << 4) // joined on top
+			if (world [i][j] & (UP | UP << 4)) // joined/door on top
 			{
-				jn.x = r.x + 2;
+				jn.x = r.x + (world [i][j] & UP ? 0 : 2);
 				jn.y = r.y - BORDERTHICK / 2;
-				jn.w = CWIDTH - BORDERTHICK - 4;
+				jn.w = CWIDTH - BORDERTHICK - (world [i][j] & UP ? 0 : 4);
 				jn.h = BORDERTHICK / 2;
 				SDL_FillRect (screen, &jn, 0xffffff);
 			}
-			if (world [i][j] & RIGHT << 4) // joined right
+			if (world [i][j] & (RIGHT | RIGHT << 4)) // joined/door right
 			{
 				jn.x = r.x + r.w;
-				jn.y = r.y + 2;
+				jn.y = r.y + (world [i][j] & RIGHT ? 0 : 2);
 				jn.w = BORDERTHICK / 2;
-				jn.h = CHEIGHT - BORDERTHICK - 4;
+				jn.h = CHEIGHT - BORDERTHICK - (world [i][j] & RIGHT ? 0 : 4);
 				SDL_FillRect (screen, &jn, 0xffffff);
 			}
-			if (world [i][j] & DOWN << 4) // joined down
+			if (world [i][j] & (DOWN | DOWN << 4)) // joined/door down
 			{
-				jn.x = r.x + 2;
+				jn.x = r.x + (world [i][j] & DOWN ? 0 : 2);
 				jn.y = r.y + r.h;
-				jn.w = CWIDTH - BORDERTHICK - 4;
+				jn.w = CWIDTH - BORDERTHICK - (world [i][j] & DOWN ? 0 : 4);
 				jn.h = BORDERTHICK / 2;
 				SDL_FillRect (screen, &jn, 0xffffff);
 			}
-			if (world [i][j] & LEFT << 4) // joined left
+			if (world [i][j] & (LEFT | LEFT << 4)) // joined/door left
 			{
 				jn.x = r.x - BORDERTHICK / 2;
-				jn.y = r.y + 2;
+				jn.y = r.y + (world [i][j] & LEFT ? 0 : 2);
 				jn.w = BORDERTHICK / 2;
-				jn.h = CHEIGHT - BORDERTHICK - 4;
+				jn.h = CHEIGHT - BORDERTHICK - (world [i][j] & LEFT ? 0 : 4);
 				SDL_FillRect (screen, &jn, 0xffffff);
 			}
 			SDL_FillRect (screen, &r, 0xffffff);
@@ -94,11 +94,27 @@ void addDoor (unsigned char x, unsigned char y, unsigned short dir)
 	world [x] [y] |= dir << 4;
 }
 
+void addIndex (unsigned char x, unsigned char y)
+{
+	indx ++;
+	stack [indx].x = x;
+	stack [indx].y = y;
+
+	return;
+}
+
 void genRoom (unsigned char x, unsigned char y, unsigned char w, unsigned char h)
 {
-	printf ("Generate room at %i, %i with dimensions %ix%i\n", x, y, w, h);
-
 	int i, j;
+
+	if (x + w >= MWIDTH || y + h >= MHEIGHT)
+		return; // not okay
+
+	for (i = 0; i < h; i++)
+		for (j = 0; j < w; j++)
+			if (world [x + j] [y + i])
+				return;
+
 	for (i = 0; i < h; i++)
 		for (j = 0; j < w; j++)
 		{
@@ -121,7 +137,15 @@ void genRoom (unsigned char x, unsigned char y, unsigned char w, unsigned char h
 				world [x + j] [y + i] |= RIGHT << 8;
 			else
 				world [x + j] [y + i] |= RIGHT;
+
+			if ((!i || !j || i == h - 1 || j == w - 1) && !(rand () % 5))
+			{
+				printf ("Adding index at %i, %i\n", x + j, y + i);
+				addIndex (x + j, y + i);
+			}
 		}
+
+//	printf ("Generated room at %i, %i with dimensions %ix%i\n", x, y, w, h);
 
 	return;
 }
@@ -162,7 +186,41 @@ void genCell (unsigned char x, unsigned char y)
 
 	for (i = 0; i < 4; i++) // Add walls
 		if (!(world [x] [y] & 1 << (4 + i))) // no door
-			world [x] [y] |= 1 << (8 + i);
+		{
+			if (rand () % 7)
+				world [x] [y] |= 1 << (8 + i);
+			else
+				switch (1 << i)
+				{
+					case UP:
+						if (!y)
+							break;
+						addDoor (x, y, UP);
+						addDoor (x, y - 1, DOWN);
+					break;
+
+					case LEFT:
+						if (!x)
+							break;
+						addDoor (x, y, LEFT);
+						addDoor (x - 1, y, RIGHT);
+					break;
+
+					case DOWN:
+						if (y == MHEIGHT - 1)
+							break;
+						addDoor (x, y, DOWN);
+						addDoor (x, y + 1, UP);
+					break;
+
+					case RIGHT:
+						if (x == MWIDTH - 1)
+							break;
+						addDoor (x, y, RIGHT);
+						addDoor (x + 1, y, LEFT);
+					break;
+				}
+		}
 
 	// Increment index and add this cell's coordinates
 	indx ++;
@@ -188,11 +246,13 @@ int main (int argc, char **argv)
 	SDL_WM_SetCaption ("dungen " __DATE__, NULL);
 
 	// chance of starting with a room
-//	if (rand () % 100 < 30)
-//		genRoom (MWIDTH / 2, MWIDTH / 2, (rand () % 5) + 1, (rand () % 5) + 1);
-//	else
+	if (rand () % 100 < 30)
+		genRoom (MWIDTH / 2, MWIDTH / 2, (rand () % 4) + 2, (rand () % 4) + 2);
+	else
+		genCell (MWIDTH / 2, MWIDTH / 2);
 
-	genCell (MWIDTH / 2, MWIDTH / 2);
+	if (!indx)
+		addIndex (MWIDTH / 2, MHEIGHT / 2);
 
 	while (1)
 	{
@@ -221,29 +281,43 @@ int main (int argc, char **argv)
 		if (stack [indx].x < MWIDTH - 1 && !world [stack [indx].x + 1] [stack [indx].y])
 			dirs [numdir++] = RIGHT;
 
-		if (!numdir) // blocked
+		if (!numdir || indx >= 64) // blocked
 		{
-			indx --;
+			indx -= rand () % indx;
 			continue;
 		}
 
 		int dir = dirs [rand () % numdir];
+		int roomHeight = (rand () % 6) + 1; // if we generate a room
+		int roomWidth = (rand () % 6) + 1;
 		switch (dir)
 		{
 			case UP:
-				genCell (stack [indx].x, stack [indx].y - 1);
+				if (rand () % 4)
+					genCell (stack [indx].x, stack [indx].y - 1);
+				else
+					genRoom (stack [indx].x - (rand () % roomWidth), stack [indx].y - roomHeight, roomWidth, roomHeight);
 			break;
 
 			case LEFT:
-				genCell (stack [indx].x - 1, stack [indx].y);
+				if (rand () % 4)
+					genCell (stack [indx].x - 1, stack [indx].y);
+				else
+					genRoom (stack [indx].x - roomWidth, stack [indx].y - (rand () % roomHeight), roomWidth, roomHeight);
 			break;
 
 			case DOWN:
-				genCell (stack [indx].x, stack [indx].y + 1);
+				if (rand () % 4)
+					genCell (stack [indx].x, stack [indx].y + 1);
+				else
+					genRoom (stack [indx].x - (rand () % roomWidth), stack [indx].y, roomWidth, roomHeight);
 			break;
 
 			case RIGHT:
-				genCell (stack [indx].x + 1, stack [indx].y);
+				if (rand () % 4)
+					genCell (stack [indx].x + 1, stack [indx].y);
+				else
+					genRoom (stack [indx].x, stack [indx].y - (rand () % roomHeight), roomWidth, roomHeight);
 			break;
 		}
 
