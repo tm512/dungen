@@ -136,7 +136,7 @@ void addIndex (unsigned char x, unsigned char y)
 
 void genRoom (unsigned char x, unsigned char y, unsigned char w, unsigned char h)
 {
-	int i, j;
+	int i, j, startindx = indx;
 
 	if (x + w >= MWIDTH || y + h >= MHEIGHT)
 		return; // not okay
@@ -170,13 +170,38 @@ void genRoom (unsigned char x, unsigned char y, unsigned char w, unsigned char h
 				world [x + j] [y + i] |= RIGHT;
 
 			if ((!i || !j || i == h - 1 || j == w - 1) && !(rand () % 5))
-			{
-				printf ("Adding index at %i, %i\n", x + j, y + i);
 				addIndex (x + j, y + i);
+
+			if ((x + j) - stack [startindx].x == 0 || (y + i) - stack [startindx].y == 0)
+			{
+				if (x + j == stack [startindx].x)
+				{
+					if (y + i < stack [startindx].y)
+					{
+						addDoor (x + j, y + i, DOWN);
+						addDoor (stack [startindx].x, stack [startindx].y, UP);
+					}
+					else
+					{
+						addDoor (x + j, y + i, UP);
+						addDoor (stack [startindx].x, stack [startindx].y, DOWN);
+					}
+				}
+				else if (y + i == stack [startindx].y)
+				{
+					if (x + j < stack [startindx].x)
+					{
+						addDoor (x + j, y + i, RIGHT);
+						addDoor (stack [startindx].x, stack [startindx].y, LEFT);
+					}
+					else
+					{
+						addDoor (x + j, y + i, LEFT);
+						addDoor (stack [startindx].x, stack [startindx].y, RIGHT);
+					}
+				}
 			}
 		}
-
-//	printf ("Generated room at %i, %i with dimensions %ix%i\n", x, y, w, h);
 
 	return;
 }
@@ -261,6 +286,16 @@ void genCell (unsigned char x, unsigned char y)
 	return;
 }
 
+unsigned int quickhash (char *str)
+{
+	unsigned int hash = 0, c;
+
+	while (c = *str++)
+		hash = c + (hash << 6) + (hash << 16) - hash;
+
+	return hash;
+}
+
 int main (int argc, char **argv)
 {
 	if (SDL_Init (SDL_INIT_VIDEO) < 0)
@@ -272,12 +307,17 @@ int main (int argc, char **argv)
 		return 1;
 	}
 
-	srand (time (NULL));
-
 	SDL_WM_SetCaption ("dungen " __DATE__, NULL);
 
+	if (argc < 2)
+		srand (time (NULL));
+	else if (atoi (argv [1]))
+		srand (atoi (argv [1]));
+	else
+		srand (quickhash (argv [1]));
+		
 	// chance of starting with a room
-	if (rand () % 100 < 30)
+	if (rand () % 100 < 40)
 		genRoom (MWIDTH / 2, MWIDTH / 2, (rand () % 4) + 2, (rand () % 4) + 2);
 	else
 		genCell (MWIDTH / 2, MWIDTH / 2);
