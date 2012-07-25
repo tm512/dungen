@@ -70,6 +70,8 @@ unsigned short world [MWIDTH] [MHEIGHT] = { 0 };
 SDL_Surface *screen;
 SDL_Event ev;
 
+int maxindx, roomchance = 20, maxroomsize = 5, startroomchance = 40, doorchance = 20;
+
 void drawMap (void)
 {
 	int i, j;
@@ -244,9 +246,7 @@ void genCell (unsigned char x, unsigned char y)
 	for (i = 0; i < 4; i++) // Add walls
 		if (!(world [x] [y] & 1 << (4 + i))) // no door
 		{
-			if (xor_rand () % 7)
-				world [x] [y] |= 1 << (8 + i);
-			else
+			if (xor_rand () % 100 < doorchance)
 				switch (1 << i)
 				{
 					case UP:
@@ -277,6 +277,8 @@ void genCell (unsigned char x, unsigned char y)
 						addDoor (x + 1, y, LEFT);
 					break;
 				}
+			else
+				world [x] [y] |= 1 << (8 + i);
 		}
 
 	// Increment index and add this cell's coordinates
@@ -299,6 +301,8 @@ unsigned int quickhash (char *str)
 
 int main (int argc, char **argv)
 {
+	int seed;
+
 	if (SDL_Init (SDL_INIT_VIDEO) < 0)
 		return 1;
 
@@ -311,20 +315,26 @@ int main (int argc, char **argv)
 	SDL_WM_SetCaption ("dungen " __DATE__, NULL);
 
 	if (argc < 2)
-		xor_srand (time (NULL));
+		seed = time (NULL);
 	else if (atoi (argv [1]))
-		xor_srand (atoi (argv [1]));
+		seed = atoi (argv [1]);
 	else
-		xor_srand (quickhash (argv [1]));
+		seed = quickhash (argv [1]);
+
+	printf ("Seeding XORgen with %i\n", seed);
+	xor_srand (seed);
 		
 	// chance of starting with a room
-	if (xor_rand () % 100 < 40)
+	if (xor_rand () % 100 < startroomchance)
 		genRoom (MWIDTH / 2, MWIDTH / 2, (xor_rand () % 4) + 2, (xor_rand () % 4) + 2);
 	else
 		genCell (MWIDTH / 2, MWIDTH / 2);
 
 	if (!indx)
 		addIndex (MWIDTH / 2, MHEIGHT / 2);
+
+	maxindx = 4 << (xor_rand () % 5);
+	printf ("max index is: %i\n", maxindx);
 
 	while (1)
 	{
@@ -353,43 +363,43 @@ int main (int argc, char **argv)
 		if (stack [indx].x < MWIDTH - 1 && !world [stack [indx].x + 1] [stack [indx].y])
 			dirs [numdir++] = RIGHT;
 
-		if (!numdir || indx >= 64) // blocked
+		if (!numdir)// || indx >= maxindx) // blocked
 		{
-			indx -= xor_rand () % indx;
+			indx -= xor_rand () % (indx - 1);
 			continue;
 		}
 
 		int dir = dirs [xor_rand () % numdir];
-		int roomHeight = (xor_rand () % 6) + 1; // if we generate a room
-		int roomWidth = (xor_rand () % 6) + 1;
+		int roomHeight = (xor_rand () % maxroomsize) + 1; // if we generate a room
+		int roomWidth = (xor_rand () % maxroomsize) + 1;
 		switch (dir)
 		{
 			case UP:
-				if (xor_rand () % 4)
-					genCell (stack [indx].x, stack [indx].y - 1);
-				else
+				if (xor_rand () % 100 < roomchance)
 					genRoom (stack [indx].x - (xor_rand () % roomWidth), stack [indx].y - roomHeight, roomWidth, roomHeight);
+				else
+					genCell (stack [indx].x, stack [indx].y - 1);
 			break;
 
 			case LEFT:
-				if (xor_rand () % 4)
-					genCell (stack [indx].x - 1, stack [indx].y);
-				else
+				if (xor_rand () % 100 < roomchance)
 					genRoom (stack [indx].x - roomWidth, stack [indx].y - (xor_rand () % roomHeight), roomWidth, roomHeight);
+				else
+					genCell (stack [indx].x - 1, stack [indx].y);
 			break;
 
 			case DOWN:
-				if (xor_rand () % 4)
-					genCell (stack [indx].x, stack [indx].y + 1);
-				else
+				if (xor_rand () % 100 < roomchance)
 					genRoom (stack [indx].x - (xor_rand () % roomWidth), stack [indx].y, roomWidth, roomHeight);
+				else
+					genCell (stack [indx].x, stack [indx].y + 1);
 			break;
 
 			case RIGHT:
-				if (xor_rand () % 4)
-					genCell (stack [indx].x + 1, stack [indx].y);
-				else
+				if (xor_rand () % 100 < roomchance)
 					genRoom (stack [indx].x, stack [indx].y - (xor_rand () % roomHeight), roomWidth, roomHeight);
+				else
+					genCell (stack [indx].x + 1, stack [indx].y);
 			break;
 		}
 
